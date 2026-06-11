@@ -539,9 +539,6 @@ Leave it unset for open access (fine for testing).
 
 ---
 
-## Connecting to Bodhi
-
-Once deployed, create these HTTP tools in Bodhi pointing to your Render URL.
 
 ### Technical Analyst (3 tools)
 
