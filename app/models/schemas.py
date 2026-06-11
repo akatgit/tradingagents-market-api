@@ -134,6 +134,7 @@ class NewsResponse(BaseModel):
 
 class BuzzDetail(BaseModel):
     news_articles: int
+    reddit_posts: int
     total_mentions: int
     attention_level: str
     interpretation: str
@@ -142,6 +143,47 @@ class BuzzDetail(BaseModel):
 class BuzzResponse(BaseModel):
     symbol: str
     buzz: BuzzDetail
+
+
+# ---------------------------------------------------------------------------
+# Reddit Social Sentiment
+# ---------------------------------------------------------------------------
+
+class RedditPostSentiment(BaseModel):
+    compound: float
+    positive: float
+    negative: float
+    neutral: float
+    label: str
+
+
+class RedditPost(BaseModel):
+    title: str
+    author: str
+    published: Optional[str] = None
+    url: Optional[str] = None
+    sentiment: RedditPostSentiment
+
+
+class RedditSentimentSummary(BaseModel):
+    avg_compound: Optional[float] = None
+    positive_count: int
+    negative_count: int
+    neutral_count: int
+    positive_pct: float
+    negative_pct: float
+    bullish_ratio: Optional[float] = None
+    overall_label: str
+
+
+class RedditResponse(BaseModel):
+    symbol: str
+    source: str
+    posts_found: int
+    posts: List[RedditPost]
+    sentiment_summary: RedditSentimentSummary
+    error: Optional[str] = None
+    note: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
