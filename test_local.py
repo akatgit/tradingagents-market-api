@@ -67,7 +67,7 @@ check("health.status == healthy", body.get("status") == "healthy")
 status, body = get("/")
 check("GET / -> 200", status == 200)
 check("root lists buzz endpoint", "buzz" in body.get("endpoints", {}))
-check("root does not list reddit", "reddit" not in body.get("endpoints", {}))
+check("root lists social_reddit endpoint", "social_reddit" in body.get("endpoints", {}))
 
 # -- Quote ---------------------------------------------------------------------
 section("Quote")
@@ -147,15 +147,38 @@ status, body = get(f"/buzz/{SYMBOL}")
 check("GET /buzz/AAPL -> 200", status == 200)
 buzz = body.get("buzz", {})
 check("buzz has news_articles", "news_articles" in buzz)
+check("buzz has reddit_posts", "reddit_posts" in buzz)
 check("buzz has total_mentions", "total_mentions" in buzz)
 check("buzz attention_level is valid",
       buzz.get("attention_level") in ("high", "moderate", "low"))
 check("buzz has interpretation", bool(buzz.get("interpretation")))
-check("buzz total_mentions equals news_articles",
-      buzz.get("total_mentions") == buzz.get("news_articles"))
+check("buzz total_mentions == news_articles + reddit_posts",
+      buzz.get("total_mentions") == buzz.get("news_articles", 0) + buzz.get("reddit_posts", 0))
 
-status, _ = get("/social/reddit/AAPL")
-check("/social/reddit removed -> 404 or 405", status in (404, 405))
+# -- Reddit Social Sentiment ---------------------------------------------------
+section("Reddit Social Sentiment")
+
+status, body = get(f"/social/reddit/{SYMBOL}?limit=10")
+check("GET /social/reddit/AAPL?limit=10 -> 200", status == 200)
+check("reddit source == reddit", body.get("source") == "reddit")
+check("reddit has posts_found", "posts_found" in body)
+check("reddit has sentiment_summary", "sentiment_summary" in body)
+
+ss = body.get("sentiment_summary", {})
+check("reddit sentiment_summary has avg_compound", "avg_compound" in ss)
+check("reddit sentiment_summary has bullish_ratio", "bullish_ratio" in ss)
+check("reddit overall_label is valid",
+      ss.get("overall_label") in ("positive", "negative", "neutral"))
+
+posts = body.get("posts", [])
+if posts:
+    first = posts[0]
+    check("post has title", bool(first.get("title")))
+    check("post has sentiment.compound", "compound" in first.get("sentiment", {}))
+    check("post sentiment.label is valid",
+          first.get("sentiment", {}).get("label") in ("positive", "negative", "neutral"))
+else:
+    print(f"  {WARN}  No Reddit posts returned (RSS may be blocked or no results)")
 
 # -- Summary -------------------------------------------------------------------
 section("Summary")

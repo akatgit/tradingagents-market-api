@@ -21,9 +21,10 @@ technical indicators computed locally and **VADER sentiment analysis** on news h
 | GET | `/candles/{symbol}?days=60` | Daily OHLCV candles |
 | GET | `/indicators/{symbol}?tail=15` | 11 technical indicators in one call (RSI, MACD, Bollinger, ADX, ATR, SMA-50, CCI, Stochastic, OBV, VWAP, EMA-20) |
 | GET | `/news/{symbol}?limit=30` | Recent news headlines with per-article VADER sentiment scores |
-| GET | `/buzz/{symbol}` | Media attention level derived from news article volume |
+| GET | `/buzz/{symbol}` | Media attention level derived from news + Reddit volume |
+| GET | `/social/reddit/{symbol}?limit=25` | Reddit post sentiment from public RSS feeds |
 
-Examples: `GET /indicators/AAPL?tail=15` · `GET /news/AAPL?limit=5` · `GET /buzz/AAPL`
+Examples: `GET /indicators/AAPL?tail=15` · `GET /news/AAPL?limit=5` · `GET /social/reddit/AAPL`
 
 ---
 
@@ -36,8 +37,8 @@ Examples: `GET /indicators/AAPL?tail=15` · `GET /news/AAPL?limit=5` · `GET /bu
 ### Step 1 — Clone and set up the environment
 
 ```bash
-git clone https://github.com/<you>/yfinance-api.git
-cd yfinance-api
+git clone https://github.com/<you>/tradingagents-market-api.git
+cd tradingagents-market-api
 
 # Create a virtual environment
 python -m venv venv
@@ -162,8 +163,8 @@ Render offers a free tier with automatic GitHub deploys — no Docker knowledge 
 git init
 git add .
 git commit -m "initial commit"
-gh repo create yfinance-api --public --push --source=.
-# or: git remote add origin https://github.com/<you>/yfinance-api.git && git push -u origin main
+gh repo create tradingagents-market-api --public --push --source=.
+# or: git remote add origin https://github.com/<you>/tradingagents-market-api.git && git push -u origin main
 ```
 
 ### Step 2 — Create a Web Service on Render
@@ -172,14 +173,14 @@ gh repo create yfinance-api --public --push --source=.
 
 1. Go to [render.com](https://render.com) and sign in.
 2. Click **New** → **Blueprint**.
-3. Connect your GitHub account and select the `yfinance-api` repository.
+3. Connect your GitHub account and select the `tradingagents-market-api` repository.
 4. Render reads `render.yaml` and configures the service automatically.
 5. Click **Apply**.
 
 **Option B — manual setup:**
 
 1. Click **New** → **Web Service**.
-2. Connect your GitHub account and select the `yfinance-api` repository.
+2. Connect your GitHub account and select the `tradingagents-market-api` repository.
 3. Configure:
    - **Runtime**: Python 3
    - **Build Command**: `pip install -r requirements.txt`
@@ -199,9 +200,9 @@ Render restarts the service automatically after saving.
 
 ### Step 4 — Get your public URL
 
-Render assigns a URL like `https://yfinance-api.onrender.com`.
+Render assigns a URL like `https://tradingagents-market-api.onrender.com`.
 
-Test it: `curl https://yfinance-api.onrender.com/health`
+Test it: `curl https://tradingagents-market-api.onrender.com/health`
 
 > **Note (free tier):** Render's free tier spins down the service after 15 minutes of
 > inactivity. The first request after idle takes ~30 seconds to cold-start. Upgrade to
@@ -230,16 +231,16 @@ Cloud Run runs the Docker container serverlessly — it scales to zero when idle
 
 ```bash
 # Create a new project (skip if you already have one)
-gcloud projects create yfinance-api --name="yFinance API"
+gcloud projects create tradingagents-market-api --name="Market Data API"
 
 # Set it as the active project
-gcloud config set project yfinance-api
+gcloud config set project tradingagents-market-api
 
 # Link billing account (required for Cloud Run)
 # List your billing accounts:
 gcloud billing accounts list
 # Attach billing:
-gcloud billing projects link yfinance-api \
+gcloud billing projects link tradingagents-market-api \
   --billing-account=<BILLING_ACCOUNT_ID>
 ```
 
@@ -255,10 +256,10 @@ gcloud services enable \
 ### Step 3 — Create an Artifact Registry repository
 
 ```bash
-gcloud artifacts repositories create yfinance-repo \
+gcloud artifacts repositories create market-data-repo \
   --repository-format=docker \
   --location=us-central1 \
-  --description="yFinance API Docker images"
+  --description="Market Data API Docker images"
 ```
 
 ### Step 4 — Build and push the Docker image
@@ -268,10 +269,10 @@ gcloud artifacts repositories create yfinance-repo \
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
 # Build the image (from the project root, where Dockerfile lives)
-docker build -t us-central1-docker.pkg.dev/yfinance-api/yfinance-repo/yfinance-api:latest .
+docker build -t us-central1-docker.pkg.dev/tradingagents-market-api/market-data-repo/market-data-api:latest .
 
 # Push to Artifact Registry
-docker push us-central1-docker.pkg.dev/yfinance-api/yfinance-repo/yfinance-api:latest
+docker push us-central1-docker.pkg.dev/tradingagents-market-api/market-data-repo/market-data-api:latest
 ```
 
 > **Tip:** Replace `us-central1` with your preferred region throughout
@@ -280,8 +281,8 @@ docker push us-central1-docker.pkg.dev/yfinance-api/yfinance-repo/yfinance-api:l
 ### Step 5 — Deploy to Cloud Run
 
 ```bash
-gcloud run deploy yfinance-api \
-  --image=us-central1-docker.pkg.dev/yfinance-api/yfinance-repo/yfinance-api:latest \
+gcloud run deploy market-data-api \
+  --image=us-central1-docker.pkg.dev/tradingagents-market-api/market-data-repo/market-data-api:latest \
   --platform=managed \
   --region=us-central1 \
   --allow-unauthenticated \
@@ -295,13 +296,13 @@ gcloud run deploy yfinance-api \
 Cloud Run will print the service URL when deployment completes:
 
 ```
-Service URL: https://yfinance-api-<hash>-uc.a.run.app
+Service URL: https://market-data-api-<hash>-uc.a.run.app
 ```
 
 Test it:
 
 ```bash
-curl https://yfinance-api-<hash>-uc.a.run.app/health
+curl https://market-data-api-<hash>-uc.a.run.app/health
 ```
 
 ### Step 6 — Set environment variables
@@ -310,13 +311,13 @@ Pass `ALPHA_VANTAGE_API_KEY` (required) and optionally `API_KEY` (endpoint prote
 
 ```bash
 # Plain env vars (visible in console)
-gcloud run services update yfinance-api \
+gcloud run services update market-data-api \
   --region=us-central1 \
   --set-env-vars ALPHA_VANTAGE_API_KEY=your-av-key,API_KEY=your-secret-key
 
 # Recommended: use Secret Manager for sensitive values
 echo -n "your-av-key" | gcloud secrets create av-api-key --data-file=-
-gcloud run services update yfinance-api \
+gcloud run services update market-data-api \
   --region=us-central1 \
   --set-secrets ALPHA_VANTAGE_API_KEY=av-api-key:latest
 ```
@@ -325,30 +326,30 @@ gcloud run services update yfinance-api \
 
 ```bash
 # Rebuild and push a new image
-docker build -t us-central1-docker.pkg.dev/yfinance-api/yfinance-repo/yfinance-api:latest .
-docker push us-central1-docker.pkg.dev/yfinance-api/yfinance-repo/yfinance-api:latest
+docker build -t us-central1-docker.pkg.dev/tradingagents-market-api/market-data-repo/market-data-api:latest .
+docker push us-central1-docker.pkg.dev/tradingagents-market-api/market-data-repo/market-data-api:latest
 
 # Update the Cloud Run service to use the new image
-gcloud run services update yfinance-api \
+gcloud run services update market-data-api \
   --region=us-central1 \
-  --image=us-central1-docker.pkg.dev/yfinance-api/yfinance-repo/yfinance-api:latest
+  --image=us-central1-docker.pkg.dev/tradingagents-market-api/market-data-repo/market-data-api:latest
 ```
 
 ### Step 8 — Monitor and manage
 
 ```bash
 # View live logs
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=yfinance-api" \
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=market-data-api" \
   --limit=50 --format="table(timestamp,textPayload)"
 
 # Stream logs in real time
-gcloud beta run services logs tail yfinance-api --region=us-central1
+gcloud beta run services logs tail market-data-api --region=us-central1
 
 # List all revisions and traffic splits
-gcloud run revisions list --service=yfinance-api --region=us-central1
+gcloud run revisions list --service=market-data-api --region=us-central1
 
 # Delete the service when no longer needed
-gcloud run services delete yfinance-api --region=us-central1
+gcloud run services delete market-data-api --region=us-central1
 ```
 
 ### Build with Cloud Build (CI/CD alternative)
@@ -356,7 +357,7 @@ gcloud run services delete yfinance-api --region=us-central1
 Skip local Docker entirely — let GCP build and deploy from source:
 
 ```bash
-gcloud run deploy yfinance-api \
+gcloud run deploy market-data-api \
   --source=. \
   --region=us-central1 \
   --allow-unauthenticated \
@@ -372,8 +373,8 @@ then deploys it — no local Docker required.
 ### Deploy with Docker locally (any platform)
 
 ```bash
-docker build -t yfinance-api .
-docker run -p 8000:8000 -e API_KEY=optional-key yfinance-api
+docker build -t market-data-api .
+docker run -p 8000:8000 -e ALPHA_VANTAGE_API_KEY=your-key -e API_KEY=optional-key market-data-api
 ```
 
 ---
@@ -451,10 +452,10 @@ pytest --cov=app --cov-report=html
 
 ```bash
 # Test against Render deployment
-TEST_BASE_URL=https://yfinance-api.onrender.com pytest
+TEST_BASE_URL=https://tradingagents-market-api.onrender.com pytest
 
 # Test against GCP Cloud Run
-TEST_BASE_URL=https://yfinance-api-<hash>-uc.a.run.app pytest
+TEST_BASE_URL=https://market-data-api-<hash>-uc.a.run.app pytest
 ```
 
 ### Option 2 — Run local smoke test script
@@ -498,8 +499,8 @@ python test_local.py
 - Candles endpoint (day ranges, boundary validation)
 - Indicators endpoint (all 11 technical indicators: RSI, MACD, Bollinger, ADX, ATR, SMA-50, CCI, Stochastic, OBV, VWAP, EMA-20)
 - News endpoint (per-article VADER sentiment, sentiment summary)
-- Buzz endpoint (attention level, interpretation)
-- Removal of deprecated social endpoints (`/social/reddit` returns 404)
+- Buzz endpoint (combined news + Reddit attention level)
+- Reddit social sentiment endpoint (post titles, VADER scores, sentiment summary)
 - API key protection (when `API_KEY` env var is set)
 
 ### Continuous Integration
@@ -539,35 +540,41 @@ Leave it unset for open access (fine for testing).
 
 ---
 
+## Connecting to Bodhi
+
+Once deployed, create these HTTP tools in Bodhi pointing to your Render URL.
 
 ### Technical Analyst (3 tools)
 
 | Tool name | URL |
 |-----------|-----|
-| `get_stock_quote` | `https://your-app.onrender.com/quote/{{ticker}}` |
-| `get_stock_candles` | `https://your-app.onrender.com/candles/{{ticker}}?days=60` |
-| `get_indicators` | `https://your-app.onrender.com/indicators/{{ticker}}?tail=15` |
+| `get_stock_quote` | `https://tradingagents-market-api.onrender.com/quote/{{ticker}}` |
+| `get_stock_candles` | `https://tradingagents-market-api.onrender.com/candles/{{ticker}}?days=60` |
+| `get_indicators` | `https://tradingagents-market-api.onrender.com/indicators/{{ticker}}?tail=15` |
 
 The `/indicators` endpoint returns all 11 indicators in a single response:
 RSI-14, MACD, Bollinger Bands-20, ADX-14, ATR-14, SMA-50, CCI-20, Stochastic-14, OBV, VWAP, EMA-20.
 
-### Sentiment Analyst (2 tools)
+### Sentiment Analyst (3 tools)
 
 | Tool name | URL |
 |-----------|-----|
-| `get_company_news` | `https://your-app.onrender.com/news/{{ticker}}?limit=30` |
-| `get_buzz` | `https://your-app.onrender.com/buzz/{{ticker}}` |
+| `get_company_news` | `https://tradingagents-market-api.onrender.com/news/{{ticker}}?limit=30` |
+| `get_reddit_sentiment` | `https://tradingagents-market-api.onrender.com/social/reddit/{{ticker}}?limit=25` |
+| `get_buzz` | `https://tradingagents-market-api.onrender.com/buzz/{{ticker}}` |
 
 Each `/news` article includes pre-computed **VADER sentiment scores** (`compound`, `positive`, `negative`, `neutral`, `label`) plus an overall `sentiment_summary` with `avg_compound`, `bullish_ratio`, and `overall_label` — the LLM doesn't need to classify sentiment itself.
 
-The `/buzz` endpoint returns a simple `attention_level` (`high` / `moderate` / `low`) and interpretation derived from news article volume.
+`/social/reddit` returns the same sentiment structure scored against Reddit post titles — useful for gauging retail investor sentiment distinct from news coverage.
+
+The `/buzz` endpoint combines news article count and Reddit post count into a single `attention_level` (`high` / `moderate` / `low`) with `total_mentions`.
 
 ---
 
 ## Project Structure
 
 ```
-market-api/
+tradingagents-market-api/
 ├── app/
 │   ├── main.py              # FastAPI app + routes
 │   ├── models/
@@ -575,7 +582,8 @@ market-api/
 │   └── services/
 │       ├── market_data.py   # Alpha Vantage quote + candles + cache
 │       ├── indicators.py    # ta library indicator computation (local)
-│       └── news.py          # Google News RSS + VADER sentiment
+│       ├── news.py          # Google News RSS + VADER sentiment
+│       └── social.py        # Reddit RSS + VADER sentiment
 ├── requirements.txt
 ├── Procfile                 # Render/Heroku start command
 ├── render.yaml              # Render Blueprint config
@@ -583,6 +591,7 @@ market-api/
 ├── Dockerfile               # Container deployment option
 ├── .env.example             # Environment variable template
 ├── .gitignore
+├── API_REFERENCE.md         # Endpoint + data source quick reference
 └── README.md
 ```
 

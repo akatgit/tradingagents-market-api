@@ -20,10 +20,12 @@ from app.models.schemas import (
     IndicatorsResponse,
     NewsResponse,
     QuoteResponse,
+    RedditResponse,
 )
 from app.services.indicators import compute_indicators
 from app.services.market_data import get_candles, get_quote
 from app.services.news import get_news
+from app.services.social import get_reddit_sentiment
 
 app = FastAPI(
     title="Market Data API",
@@ -66,6 +68,7 @@ def root():
             "indicators": "/indicators/{symbol}?tail=15",
             "news": "/news/{symbol}?limit=30",
             "buzz": "/buzz/{symbol}",
+            "social_reddit": "/social/reddit/{symbol}",
         },
     }
 
@@ -147,7 +150,7 @@ def news(
 
 @app.get("/buzz/{symbol}", response_model=BuzzResponse, tags=["sentiment"])
 def buzz(symbol: str, api_key: str | None = Query(default=None)):
-    """Media attention score based on news article volume."""
+    """Media attention score based on news + Reddit post volume."""
     _check_key(api_key)
     try:
         news_data = get_news(symbol, limit=50)
@@ -155,25 +158,49 @@ def buzz(symbol: str, api_key: str | None = Query(default=None)):
     except Exception:
         news_count = 0
 
-    if news_count >= 40:
+    reddit_data = get_reddit_sentiment(symbol, limit=25)
+    reddit_count = reddit_data.get("posts_found", 0)
+
+    total = news_count + reddit_count
+
+    if total >= 50:
         level = "high"
-        interpretation = "Stock is receiving above-average attention in the news"
-    elif news_count >= 15:
+        interpretation = "Stock is receiving above-average attention across news and social media"
+    elif total >= 20:
         level = "moderate"
-        interpretation = "Stock is receiving moderate attention in the news"
+        interpretation = "Stock is receiving moderate attention across news and social media"
     else:
         level = "low"
-        interpretation = "Stock is receiving below-average attention in the news"
+        interpretation = "Stock is receiving below-average attention across news and social media"
 
     return {
         "symbol": symbol.upper(),
         "buzz": {
             "news_articles": news_count,
-            "total_mentions": news_count,
+            "reddit_posts": reddit_count,
+            "total_mentions": total,
             "attention_level": level,
             "interpretation": interpretation,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Social
+# ---------------------------------------------------------------------------
+
+@app.get("/social/reddit/{symbol}", response_model=RedditResponse, tags=["social"])
+def reddit_sentiment(
+    symbol: str,
+    limit: int = Query(default=25, ge=1, le=50),
+    api_key: str | None = Query(default=None),
+):
+    """Reddit social sentiment from public RSS feeds."""
+    _check_key(api_key)
+    try:
+        return get_reddit_sentiment(symbol, limit=limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Reddit error: {exc}")
 
 
 if __name__ == "__main__":
